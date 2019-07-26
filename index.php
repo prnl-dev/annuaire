@@ -1,48 +1,71 @@
 <?php
-session_start();
-try
-{
-	$db = new PDO('mysql:host=localhost;dbname=annuaire;charset=utf8', 'root', '', array(PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION));
-}
-catch(Exception $e)
-{
-        die('Erreur : '.$e->getMessage());
-}
-$contacts = $db->prepare("SELECT name, firstname, tel FROM contacts ORDER BY name");
-?>
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <link  rel="stylesheet" type="text/css" href="styles.css">
-    <title>Annuaire</title>
-</head>
+include "model/BO/Contact.php";
+include "model/DAO/dao.php";
 
-<body>
-    <h1>Bienvenue dans l'annuaire</h1>
-    <h3>Ajouter un nouveau contact :</h3>
-    <form method="POST" action="post.php">
-        <label for="name">Nom : </label>
-        <input type="text" name="name">
-        <label for="firstname">Prénom : </label>
-        <input type="text" name="firstname">
-        <label for="tel">Téléphone : </label>
-        <input type="tel" name="tel"><br>
-        <input type="submit" value="Envoyer">
-    </form>
+//connection database (Dao.php)
+$db = new dao();
 
-    <div id="liste_contacts">
-        <h3>Liste des contacts :</h3>
-        <ul>
-        <?php 
-        $contacts->execute();
-        while ($contact = $contacts->fetch()) {
-            echo "<li>Nom : ".$contact['name']."<br>Prénom : ".$contact['firstname']."<br>Téléphone : ".$contact['tel']."</li>";
+function check($name, $firstname, $tel) {
+    $checkTel = checkTel($tel);
+    if ($checkTel) {
+        $valid = true;
+    } else $valid = false;
+    return $valid;
+}
+function checkTel($tel) {
+    if (preg_match("#^0[1-9]([-. ]?[0-9]{2}){4}$#",$tel)) {
+        $valid = true;
+    } else {
+        $valid = false;
+    }
+    return $valid;
+}
+function formateTel($tel) {
+    $chars = array(".","-");
+    $tel = str_replace($chars,"",$tel);
+    return $tel;
+}
+function createContact($name,$firstname,$tel) {
+    //control
+    $check = check($name,$firstname,$tel);
+    if ($check) {
+        $tel = formateTel(htmlspecialchars($_POST['tel']));
+        //create new Contact object
+        $newContact = new Contact(0, $name, $firstname, $tel);
+    } else {
+        $newContact = null;
+    }
+    return $newContact;
+}
+
+//control, create and insert new contact from newContactForm (welcome.php)
+if(isset($_POST['name']) && isset($_POST['firstname']) && isset($_POST['tel'])) {
+    $newContact = createContact(htmlspecialchars($_POST['name']), htmlspecialchars($_POST['firstname']), htmlspecialchars($_POST['tel']));
+    //insert Contact object into database
+    if ($newContact) {
+        $resp = $db->addContact($newContact);
+        if (!$resp) {
+            echo "Erreur insertion base de données";
         }
-        $contacts->closeCursor();
-        ?>
-        </ul>
-    </div>
-</body>
+    } else {
+        echo "Erreur format";
+    }
+}
+
+//control and set contact form setContactForm (welcome.php)
+if (isset($_POST['newName']) && isset($_POST['newFirstname']) && isset($_POST['newTel'])) {
+    $newContact = createContact(htmlspecialchars($_POST['newName']), htmlspecialchars($_POST['newFirstname']), htmlspecialchars($_POST['newTel']));
+    //set Contact object into database
+    if ($newContact) {
+        $resp = $db->setContact($newContact);
+        if (!$resp) {
+            echo "Erreur insertion base de données";
+        }
+    } else {
+        echo "Erreur format";
+    }
+}
+
+$contacts = $db->getContactsList();
+
+include "view/welcome.php";
